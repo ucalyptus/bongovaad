@@ -1,0 +1,12 @@
+transformers
+datasets
+librosa
+evaluate
+jiwer
+gradio
+bitsandbytes==0.37
+accelerate
+peft @ git+https://github.com/huggingface/peft.git@main
+pydub @ git+https://github.com/jiaaro/pydub.git@master
+pytube
+yt-dlp
