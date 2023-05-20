@@ -1,5 +1,4 @@
-# bongovaad
-
+# bongovaad [![PyPI version](https://badge.fury.io/py/bongovaad.svg)](https://badge.fury.io/py/bongovaad)
 bongovaad is a Python package that provides functionality for transcribing audio from YouTube videos. It utilizes the powerful ASR (Automatic Speech Recognition) model provided by the Whisper library from Hugging Face.
 
 ## Features
