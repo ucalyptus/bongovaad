@@ -40,3 +40,6 @@ This project is licensed under the MIT License. See the LICENSE file for more in
 # Contributing
 Contributions are welcome! Please refer to the contributing guidelines for more information.
 If you encounter any issues or have suggestions for improvements, please create a new issue on the GitHub repository.
+
+# Acknowledgements
+- [PEFT](https://github.com/huggingface/peft)
