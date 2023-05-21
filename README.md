@@ -3,8 +3,8 @@ bongovaad is a Python package that provides functionality for transcribing audio
 
 ## Features
 
-- We have already LoRA-tuned the whisper-large-v2 model on the 'bn' subset of Mozilla Common Voice 13, obtaining a Word-Error-Rate(WER) of 57, compared to the WER of 103.4 obtained by the original OpenAI [paper](https://cdn.openai.com/papers/whisper.pdf)(Page 23). More information available [here](https://huggingface.co/ucalyptus/whisper-large-v2-bengali-100steps).
-- Handles audio segmentation for longer videos using AudioSegment
+- We have already [LoRA](https://arxiv.org/abs/2106.09685)-tuned the whisper-large-v2 model on the 'bn' subset of Mozilla Common Voice 13, obtaining a Word-Error-Rate(WER) of 57, compared to the WER of 103.4 obtained by the original OpenAI [paper](https://cdn.openai.com/papers/whisper.pdf)(Page 23). More information available [here](https://huggingface.co/ucalyptus/whisper-large-v2-bengali-100steps).
+- Handles audio segmentation for longer videos using AudioSegment.
 
 ### ToDo
 -  Automatic SRT file creation
