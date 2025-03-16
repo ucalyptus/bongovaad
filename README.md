@@ -1,44 +1,127 @@
 # bongovaad (বঙ্গবাদ) [![PyPI version](https://badge.fury.io/py/bongovaad.svg)](https://badge.fury.io/py/bongovaad)
-bongovaad is a Python package that provides functionality for transcribing audio from YouTube videos. It utilizes the powerful ASR (Automatic Speech Recognition) model provided by the Whisper library from Hugging Face.
+
+bongovaad is a Python package for transcribing Bengali audio from YouTube videos. It uses a fine-tuned Whisper model optimized for Bengali speech recognition.
 
 ## Features
 
-- We have already [LoRA](https://arxiv.org/abs/2106.09685)-tuned the whisper-large-v2 model on the 'bn' subset of Mozilla Common Voice 13, obtaining a Word-Error-Rate(WER) of 57, compared to the WER of 103.4 obtained by the original OpenAI [paper](https://cdn.openai.com/papers/whisper.pdf)(Page 23). More information available [here](https://huggingface.co/ucalyptus/whisper-large-v2-bengali-100steps).
-- Handles audio segmentation for longer videos using AudioSegment.
+- **Fine-tuned Model**: We've [LoRA](https://arxiv.org/abs/2106.09685)-tuned the whisper-large-v2 model on the 'bn' subset of Mozilla Common Voice 13, achieving a Word-Error-Rate(WER) of 57, compared to the WER of 103.4 in the original OpenAI [paper](https://cdn.openai.com/papers/whisper.pdf) (Page 23).
+- **SRT Subtitle Generation**: Automatically creates SRT subtitle files for video players.
+- **Efficient Audio Processing**: Handles audio segmentation for longer videos with progress tracking.
+- **Temporary File Management**: Uses temporary directories for clean processing.
+- **Robust Error Handling**: Comprehensive error handling and logging.
+- **Command-line Interface**: Easy-to-use CLI with multiple options.
 
-### ToDo
--  Automatic SRT file creation
+## Requirements
+
+- Python 3.8 or higher
+- CUDA-compatible GPU (recommended for faster processing)
+- ffmpeg
 
 ## Installation
 
-Before using bongovaad, you need to install ffmpeg:
+### 1. Install ffmpeg
 
-```
+**Ubuntu/Debian:**
+```bash
 sudo apt install ffmpeg -y
 ```
 
-To install bongovaad, you can use pip:
-`pip install bongovaad`
+**macOS (using Homebrew):**
+```bash
+brew install ffmpeg
+```
 
+**Windows (using Chocolatey):**
+```bash
+choco install ffmpeg
+```
 
-# Usage
-bongovaad provides a command-line interface (CLI) that allows you to transcribe audio from YouTube videos. Here's how to use it:
+### 2. Install bongovaad
 
-`bongovaad --url <youtube_url>`
+```bash
+pip install bongovaad
+```
 
-Replace <youtube_url> with the actual YouTube URL of the video you want to transcribe. The output will be written to text files containing the transcriptions of the audio segments.
+## Usage
 
-# Example
-`bongovaad --url https://www.youtube.com/watch?v=ABC12345`
+### Basic Usage
 
-This command transcribes the audio from the YouTube video with the specified URL (https://www.youtube.com/watch?v=ABC12345).
+```bash
+bongovaad --url "https://www.youtube.com/watch?v=VIDEO_ID"
+```
 
-# License
-This project is licensed under the MIT License. See the LICENSE file for more information.
+### Advanced Options
 
-# Contributing
-Contributions are welcome! Please refer to the contributing guidelines for more information.
-If you encounter any issues or have suggestions for improvements, please create a new issue on the GitHub repository.
+```bash
+bongovaad --url "https://www.youtube.com/watch?v=VIDEO_ID" \
+          --segment-length 10 \
+          --output-format both \
+          --device cuda \
+          --verbose
+```
 
-# Acknowledgements
-- [PEFT](https://github.com/huggingface/peft)
+### Command-line Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--url` | YouTube URL for audio transcription | (Required) |
+| `--segment-length` | Length of each audio segment in seconds | 8 |
+| `--output-format` | Output format (txt, srt, or both) | both |
+| `--use-8bit` | Use 8-bit quantization for the model | True |
+| `--device` | Device to use for inference (auto, cuda, cpu) | auto |
+| `--verbose` | Enable verbose logging | False |
+
+## Output Files
+
+The tool generates two types of output files:
+
+1. **Text File** (`VIDEO_ID.txt`): Contains the full transcription text.
+2. **SRT File** (`VIDEO_ID.srt`): Contains time-coded subtitles compatible with video players.
+
+## Python API
+
+You can also use bongovaad as a Python library:
+
+```python
+from bongovaad import BongoVaadTranscriber
+
+# Initialize the transcriber
+transcriber = BongoVaadTranscriber(use_8bit=True, device="cuda")
+
+# Transcribe a YouTube video
+output_files = transcriber.transcribe(
+    url="https://www.youtube.com/watch?v=VIDEO_ID",
+    segment_length_seconds=10,
+    output_format="both"
+)
+
+# Print output file paths
+print(f"Text file: {output_files['txt']}")
+print(f"SRT file: {output_files['srt']}")
+```
+
+## Performance Considerations
+
+- Processing time depends on video length and hardware capabilities.
+- Using a GPU significantly improves performance.
+- Longer segment lengths may improve speed but could reduce accuracy for complex audio.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Here's how you can contribute:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`
+3. Commit your changes: `git commit -am 'Add some feature'`
+4. Push to the branch: `git push origin feature-name`
+5. Submit a pull request
+
+## Acknowledgements
+
+- [PEFT](https://github.com/huggingface/peft) for parameter-efficient fine-tuning
+- [Whisper](https://github.com/openai/whisper) for the base ASR model
+- [Mozilla Common Voice](https://commonvoice.mozilla.org/) for the training dataset
