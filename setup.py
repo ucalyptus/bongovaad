@@ -10,8 +10,8 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name='bongovaad',
-    version='0.4.0',
-    description='Bengali Speech Recognition Tool for YouTube videos',
+    version='0.5.0',
+    description='Bengali Speech Recognition Tool using Hugging Face Inference API',
     long_description=long_description,
     long_description_content_type="text/markdown",
     author='ucalyptus',
@@ -37,5 +37,5 @@ setup(
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
         'Topic :: Multimedia :: Sound/Audio :: Speech',
     ],
-    keywords='bengali, speech recognition, whisper, youtube, transcription, subtitles',
+    keywords='bengali, speech recognition, whisper, youtube, transcription, subtitles, huggingface, api',
 )

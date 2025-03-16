@@ -163,3 +163,14 @@ cython_debug/
 *.txt
 *.srt
 !requirements.txt
+uit.txt
+
+# PyPI configuration
+.pypirc
+~/.pypirc
+~/.config/pip/pip.conf
+
+# Temporary files
+.DS_Store
+.vscode/
+.idea/

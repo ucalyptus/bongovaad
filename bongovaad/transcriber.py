@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 BongoVaad - Bengali Speech Recognition Tool
-A tool for transcribing Bengali audio from YouTube videos using fine-tuned Whisper models.
+A tool for transcribing Bengali audio from YouTube videos using Hugging Face Inference API.
 """
 
 import argparse
+import asyncio
+import json
 import logging
 import os
 import sys
@@ -12,19 +14,12 @@ import tempfile
 from datetime import timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
+import aiohttp
 import ffmpeg
 import srt
-import torch
-from peft import PeftConfig, PeftModel
 from pydub import AudioSegment
 from pytube import YouTube
 from tqdm import tqdm
-from transformers import (
-    AutomaticSpeechRecognitionPipeline,
-    WhisperForConditionalGeneration,
-    WhisperProcessor,
-    WhisperTokenizer,
-)
 
 # Configure logging
 logging.basicConfig(
@@ -38,63 +33,56 @@ logger = logging.getLogger("bongovaad")
 class BongoVaadTranscriber:
     """Main class for handling Bengali speech transcription."""
 
-    def __init__(self, use_8bit: bool = True, device: str = "auto"):
+    def __init__(self, api_key: Optional[str] = None, model_id: str = "openai/whisper-large-v3-turbo"):
         """
-        Initialize the transcriber with the fine-tuned model.
+        Initialize the transcriber with Hugging Face Inference API.
         
         Args:
-            use_8bit: Whether to use 8-bit quantization for the model
-            device: Device to use for inference ("auto", "cuda", "cpu")
+            api_key: Hugging Face API key (if None, will look for HF_API_KEY environment variable)
+            model_id: Model ID to use for transcription
         """
-        self.peft_model_id = "ucalyptus/whisper-large-v2-bengali-100steps"
-        self.language = "bn"
-        self.task = "transcribe"
-        self.use_8bit = use_8bit
-        self.device = device
-        self.pipeline = None
-        self.forced_decoder_ids = None
+        self.api_key = api_key or os.environ.get("HF_API_KEY")
+        if not self.api_key:
+            logger.warning("No API key provided. Set HF_API_KEY environment variable or pass api_key parameter.")
         
-        # Initialize the model and pipeline
-        self._setup_pipeline()
+        self.model_id = model_id
+        self.api_url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
+        logger.info(f"Using model: {model_id}")
 
-    def _setup_pipeline(self) -> None:
-        """Set up the ASR pipeline with the fine-tuned model."""
-        logger.info("Loading model and setting up pipeline...")
+    async def _transcribe_audio_segment(self, segment_file: str) -> Dict:
+        """
+        Transcribe an audio segment using Hugging Face Inference API.
+        
+        Args:
+            segment_file: Path to the audio segment file
+            
+        Returns:
+            Transcription result
+        """
         try:
-            peft_config = PeftConfig.from_pretrained(self.peft_model_id)
-            model = WhisperForConditionalGeneration.from_pretrained(
-                peft_config.base_model_name_or_path, 
-                load_in_8bit=self.use_8bit, 
-                device_map=self.device
-            )
-            model = PeftModel.from_pretrained(model, self.peft_model_id)
+            with open(segment_file, "rb") as f:
+                audio_data = f.read()
             
-            tokenizer = WhisperTokenizer.from_pretrained(
-                peft_config.base_model_name_or_path, 
-                language=self.language, 
-                task=self.task
-            )
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/octet-stream"
+            }
             
-            processor = WhisperProcessor.from_pretrained(
-                peft_config.base_model_name_or_path, 
-                language=self.language, 
-                task=self.task
-            )
-            
-            feature_extractor = processor.feature_extractor
-            self.forced_decoder_ids = processor.get_decoder_prompt_ids(
-                language=self.language, 
-                task=self.task
-            )
-            
-            self.pipeline = AutomaticSpeechRecognitionPipeline(
-                model=model, 
-                tokenizer=tokenizer, 
-                feature_extractor=feature_extractor
-            )
-            logger.info("Pipeline setup complete.")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    headers=headers,
+                    data=audio_data
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        raise Exception(f"API request failed with status {response.status}: {error_text}")
+                    
+                    result = await response.json()
+                    return result
+                    
         except Exception as e:
-            logger.error(f"Failed to set up pipeline: {str(e)}")
+            logger.error(f"Failed to transcribe segment: {str(e)}")
             raise
 
     def download_audio(self, url: str) -> str:
@@ -151,10 +139,10 @@ class BongoVaadTranscriber:
             logger.error(f"Failed to extract YouTube video ID: {str(e)}")
             raise
 
-    def transcribe(self, url: str, segment_length_seconds: int = 8, 
+    async def transcribe_async(self, url: str, segment_length_seconds: int = 8, 
                   output_format: str = "both") -> Dict[str, str]:
         """
-        Transcribe audio from a YouTube video.
+        Transcribe audio from a YouTube video asynchronously.
         
         Args:
             url: YouTube URL
@@ -182,11 +170,12 @@ class BongoVaadTranscriber:
             # Prepare for transcription
             segments = []
             transcriptions = []
+            segment_files = []
             
-            # Process each segment
+            # Split audio into segments
             for i, segment_start in enumerate(tqdm(
                 range(0, total_duration_ms, segment_length_ms),
-                desc="Transcribing segments",
+                desc="Preparing segments",
                 unit="segment"
             )):
                 segment_end = min(segment_start + segment_length_ms, total_duration_ms)
@@ -197,26 +186,41 @@ class BongoVaadTranscriber:
                     segment_file = temp_file.name
                 
                 segment.export(segment_file, format="mp3")
+                segment_files.append({
+                    "file": segment_file,
+                    "start": segment_start,
+                    "end": segment_end
+                })
+            
+            # Transcribe segments concurrently
+            logger.info("Transcribing segments...")
+            tasks = []
+            for segment_info in segment_files:
+                task = asyncio.create_task(self._transcribe_audio_segment(segment_info["file"]))
+                tasks.append((task, segment_info))
+            
+            # Process results as they complete
+            for i, (task, segment_info) in enumerate(tqdm(
+                tasks, 
+                desc="Transcribing segments",
+                unit="segment"
+            )):
+                result = await task
                 
-                # Transcribe the segment
-                with torch.cuda.amp.autocast():
-                    transcript = self.pipeline(
-                        segment_file, 
-                        generate_kwargs={"forced_decoder_ids": self.forced_decoder_ids}, 
-                        max_new_tokens=448
-                    )
+                # Extract text from result
+                text = result.get("text", "").strip()
                 
                 # Store segment information for SRT
                 segments.append({
-                    "start": segment_start,
-                    "end": segment_end,
-                    "text": transcript["text"].strip()
+                    "start": segment_info["start"],
+                    "end": segment_info["end"],
+                    "text": text
                 })
                 
-                transcriptions.append(transcript["text"])
+                transcriptions.append(text)
                 
                 # Delete temporary file
-                os.remove(segment_file)
+                os.remove(segment_info["file"])
             
             # Create output files
             output_files = {}
@@ -249,6 +253,25 @@ class BongoVaadTranscriber:
         except Exception as e:
             logger.error(f"Transcription failed: {str(e)}")
             raise
+
+    def transcribe(self, url: str, segment_length_seconds: int = 8, 
+                  output_format: str = "both") -> Dict[str, str]:
+        """
+        Transcribe audio from a YouTube video (synchronous wrapper).
+        
+        Args:
+            url: YouTube URL
+            segment_length_seconds: Length of each audio segment in seconds
+            output_format: Output format ("txt", "srt", or "both")
+            
+        Returns:
+            Dictionary with paths to output files
+        """
+        return asyncio.run(self.transcribe_async(
+            url=url,
+            segment_length_seconds=segment_length_seconds,
+            output_format=output_format
+        ))
 
     def _create_srt(self, segments: List[Dict[str, Union[int, str]]]) -> str:
         """
@@ -303,17 +326,16 @@ def main():
         help="Output format (txt, srt, or both)"
     )
     parser.add_argument(
-        "--use-8bit", 
-        action="store_true", 
-        default=True,
-        help="Use 8-bit quantization for the model"
+        "--api-key", 
+        type=str, 
+        default=None,
+        help="Hugging Face API key (if not provided, will use HF_API_KEY environment variable)"
     )
     parser.add_argument(
-        "--device", 
+        "--model-id", 
         type=str, 
-        default="auto",
-        choices=["auto", "cuda", "cpu"],
-        help="Device to use for inference"
+        default="openai/whisper-large-v3-turbo",
+        help="Model ID to use for transcription"
     )
     parser.add_argument(
         "--verbose", 
@@ -330,8 +352,8 @@ def main():
     try:
         # Initialize transcriber
         transcriber = BongoVaadTranscriber(
-            use_8bit=args.use_8bit,
-            device=args.device
+            api_key=args.api_key,
+            model_id=args.model_id
         )
         
         # Transcribe audio
